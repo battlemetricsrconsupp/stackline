@@ -482,12 +482,16 @@ export async function getRecentlyPlayedWith(userId: string) {
 export async function getUserTrustMap(userIds: string[]) {
   await ensureEngagementSchema();
 
-  if (!userIds.length) {
+  const safeUserIds = userIds.filter(
+    (userId): userId is string => typeof userId === "string" && userId.length > 0
+  );
+
+  if (!safeUserIds.length) {
     return new Map<string, { reliabilityScore: number; badges: string[]; positiveRatings: number; negativeRatings: number; activeDays: number; activityStreak: number; sessionsPlayed: number }>();
   }
 
   const rows = await prisma.user.findMany({
-    where: { id: { in: userIds } },
+    where: { id: { in: safeUserIds } },
     select: {
       id: true,
       positiveRatings: true,
@@ -624,13 +628,17 @@ export async function getPersonalizedSections(viewerId: string) {
     }
     const otherUserId =
       session.userAId === viewerId ? session.userBId : session.userAId;
+    if (!otherUserId) {
+      continue;
+    }
     playedWellWithCounts.set(otherUserId, (playedWellWithCounts.get(otherUserId) ?? 0) + 1);
   }
 
   const playedWellWithIds = Array.from(playedWellWithCounts.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, 4)
-    .map(([otherUserId]) => otherUserId);
+    .map(([otherUserId]) => otherUserId)
+    .filter((userId): userId is string => typeof userId === "string" && userId.length > 0);
 
   const playedWellWithUsers = playedWellWithIds.length
     ? await prisma.user.findMany({
