@@ -45,7 +45,7 @@ export default async function DiscoverPage() {
           </div>
 
           <SwipeDeck
-            players={players.map((player) => ({
+            players={players.map((player: (typeof players)[number]) => ({
               id: player.id,
               username: player.username,
               age: player.age,
@@ -60,9 +60,13 @@ export default async function DiscoverPage() {
               onlineStatus: player.presence.onlineStatus,
               currentlyPlaying: player.presence.currentlyPlaying,
               lastActiveLabel: player.lastActiveLabel,
-              languages: player.languages.map((item) => item.language),
-              playstyles: player.playstyles.map((item) => item.tag),
-              games: player.gameProfiles.map((item) => ({
+              languages: player.languages.map(
+                (item: (typeof player.languages)[number]) => item.language
+              ),
+              playstyles: player.playstyles.map(
+                (item: (typeof player.playstyles)[number]) => item.tag
+              ),
+              games: player.gameProfiles.map((item: (typeof player.gameProfiles)[number]) => ({
                 name: item.game.name,
                 rankLabel: item.rankLabel,
                 slug: item.game.slug,
