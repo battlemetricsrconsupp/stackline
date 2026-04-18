@@ -1,0 +1,274 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MatchStatus {
+  PENDING
+  MATCHED
+  BLOCKED
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWING
+  RESOLVED
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+}
+
+model User {
+  id                  String            @id @default(cuid())
+  email               String            @unique
+  passwordHash        String
+  username            String            @unique
+  role                String            @default("USER")
+  age                 Int?
+  region              String?
+  timezone            String?
+  bio                 String?
+  image               String?
+  discordHandle       String?
+  partyLink           String?
+  lookingForGroup     Boolean           @default(true)
+  isLookingNow        Boolean           @default(false)
+  onlineStatus        String            @default("Online")
+  currentlyPlaying    String?
+  lastActiveAt        DateTime?
+  lastActiveDate      String?
+  activeDays          Int               @default(0)
+  activityStreak      Int               @default(0)
+  lookingNowStartedAt DateTime?
+  positiveRatings     Int               @default(0)
+  negativeRatings     Int               @default(0)
+  sessionsPlayed      Int               @default(0)
+  onboardingCompleted Boolean           @default(false)
+  accountStatus       AccountStatus     @default(ACTIVE)
+  moderationNote      String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  languages           UserLanguage[]
+  gameProfiles        UserGameProfile[]
+  playstyles          UserPlaystyle[]
+  playTimes           UserPlayTime[]
+  sentLikes           Like[]            @relation("SentLikes")
+  receivedLikes       Like[]            @relation("ReceivedLikes")
+  matchesAsA          Match[]           @relation("MatchUserA")
+  matchesAsB          Match[]           @relation("MatchUserB")
+  sentMessages        Message[]
+  sessions            Session[]
+  reportsMade         Report[]          @relation("ReportsMade")
+  reportsReceived     Report[]          @relation("ReportsReceived")
+  blocksMade          Block[]           @relation("BlocksMade")
+  blocksReceived      Block[]           @relation("BlocksReceived")
+  sentPlayInvites     PlayInvite[]      @relation("PlayInviteSender")
+  receivedPlayInvites PlayInvite[]      @relation("PlayInviteReceiver")
+  playSessionsAsA     PlaySession[]     @relation("PlaySessionUserA")
+  playSessionsAsB     PlaySession[]     @relation("PlaySessionUserB")
+  initiatedSessions   PlaySession[]     @relation("PlaySessionInitiator")
+  notifications       Notification[]
+  ratingsGiven        TeammateRating[]  @relation("RatingsGiven")
+  ratingsReceived     TeammateRating[]  @relation("RatingsReceived")
+  communityMessages   CommunityMessage[]
+}
+
+model Game {
+  id          String            @id @default(cuid())
+  slug        String            @unique
+  name        String            @unique
+  genre       String?
+  description String?
+  active      Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  userProfiles UserGameProfile[]
+}
+
+model UserGameProfile {
+  id        String   @id @default(cuid())
+  userId    String
+  gameId    String
+  rankLabel String
+  priority  Int      @default(0)
+  notes     String?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gameId])
+}
+
+model UserLanguage {
+  id       String @id @default(cuid())
+  userId   String
+  language String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, language])
+}
+
+model UserPlaystyle {
+  id   String @id @default(cuid())
+  userId String
+  tag  String
+  user User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tag])
+}
+
+model UserPlayTime {
+  id      String @id @default(cuid())
+  userId  String
+  label   String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, label])
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  fromUserId String
+  toUserId   String
+  createdAt DateTime @default(now())
+  fromUser  User     @relation("SentLikes", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser    User     @relation("ReceivedLikes", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@unique([fromUserId, toUserId])
+}
+
+model Match {
+  id        String      @id @default(cuid())
+  userAId   String
+  userBId   String
+  status    MatchStatus @default(PENDING)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  userA     User        @relation("MatchUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB     User        @relation("MatchUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  messages  Message[]
+
+  @@unique([userAId, userBId])
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  matchId   String
+  senderId  String
+  content   String
+  createdAt DateTime @default(now())
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Report {
+  id             String       @id @default(cuid())
+  reporterId     String
+  reportedUserId String
+  reason         String
+  details        String?
+  status         ReportStatus @default(OPEN)
+  createdAt      DateTime     @default(now())
+  reporter       User         @relation("ReportsMade", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedUser   User         @relation("ReportsReceived", fields: [reportedUserId], references: [id], onDelete: Cascade)
+}
+
+model Block {
+  id        String   @id @default(cuid())
+  blockerId String
+  blockedId String
+  reason    String?
+  createdAt DateTime @default(now())
+  blocker   User     @relation("BlocksMade", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("BlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+}
+
+model PlayInvite {
+  id          String   @id @default(cuid())
+  senderId    String
+  receiverId  String
+  gameSlug    String?
+  status      String   @default("PENDING")
+  createdAt   DateTime @default(now())
+  respondedAt DateTime?
+  sender      User     @relation("PlayInviteSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver    User     @relation("PlayInviteReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+}
+
+model PlaySession {
+  id             String   @id @default(cuid())
+  playInviteId   String?
+  matchId        String?
+  userAId        String
+  userBId        String
+  initiatorId    String
+  gameSlug       String?
+  status         String   @default("PENDING")
+  startedAt      DateTime @default(now())
+  promptAfterAt  DateTime
+  completedAt    DateTime?
+  userAConfirmedAt DateTime?
+  userBConfirmedAt DateTime?
+  createdAt      DateTime @default(now())
+  userA          User     @relation("PlaySessionUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB          User     @relation("PlaySessionUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  initiator      User     @relation("PlaySessionInitiator", fields: [initiatorId], references: [id], onDelete: Cascade)
+}
+
+model TeammateRating {
+  id          String   @id @default(cuid())
+  sessionId    String
+  raterId      String
+  ratedUserId  String
+  value        Int
+  note         String?
+  createdAt    DateTime @default(now())
+  rater        User     @relation("RatingsGiven", fields: [raterId], references: [id], onDelete: Cascade)
+  ratedUser    User     @relation("RatingsReceived", fields: [ratedUserId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  type      String
+  userId    String?
+  metadata  String?
+  createdAt DateTime @default(now())
+}
+
+model CommunityMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+}

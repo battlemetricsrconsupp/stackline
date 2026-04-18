@@ -1,0 +1,236 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0f1724;
+  --bg-elevated: rgba(20, 29, 43, 0.9);
+  --surface: rgba(25, 35, 52, 0.82);
+  --surface-strong: rgba(31, 43, 63, 0.94);
+  --surface-soft: rgba(255, 122, 89, 0.08);
+  --border: rgba(141, 162, 193, 0.2);
+  --text: #eef3fb;
+  --text-soft: #9aa8bf;
+  --accent: #ff7a59;
+  --accent-2: #7dc7ff;
+  --accent-3: #d9b35d;
+  --danger: #ff7f8f;
+  --warning: #d9b35d;
+  --shadow: 0 12px 32px rgba(7, 11, 18, 0.18);
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+}
+
+@theme inline {
+  --font-sans: "Bahnschrift", "Arial Narrow", "Segoe UI Variable Display", sans-serif;
+  --font-mono: "IBM Plex Mono", "Consolas", "SFMono-Regular", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  background-color: var(--bg);
+}
+
+body {
+  font-family: "Bahnschrift", "Arial Narrow", "Segoe UI Variable Display", sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  position: relative;
+  overflow-x: clip;
+}
+
+.app-background {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 14% 12%, rgba(255, 122, 89, 0.12), transparent 24%),
+    radial-gradient(circle at 82% 16%, rgba(125, 199, 255, 0.08), transparent 26%),
+    linear-gradient(180deg, #0f1724 0%, #131c2b 42%, #182131 100%);
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center top;
+}
+
+.app-shell {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(255, 92, 138, 0.26);
+}
+
+.panel {
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(28, 39, 57, 0.92), rgba(20, 29, 43, 0.95));
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+  background-clip: padding-box;
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow);
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+.panel::before,
+.panel::after,
+.scan-line::after {
+  pointer-events: none;
+}
+
+.panel::before,
+.panel::after {
+  content: none;
+}
+
+.pill {
+  border: 1px solid rgba(141, 162, 193, 0.18);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.glow {
+  box-shadow: 0 0 0 1px rgba(255, 122, 89, 0.18);
+}
+
+.app-transition {
+  transition:
+    transform 180ms ease,
+    opacity 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.section-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.hud-label {
+  font-family: "IBM Plex Mono", "Consolas", monospace;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.hero-title {
+  font-family: "Bahnschrift", "Arial Narrow", "Segoe UI Variable Display", sans-serif;
+  letter-spacing: 0.01em;
+}
+
+.hud-frame {
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+}
+
+.accent-divider {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3));
+}
+
+.hero-shimmer {
+  background-image: linear-gradient(
+    110deg,
+    #ffffff 0%,
+    #ffffff 34%,
+    #ffd1c4 46%,
+    #ffffff 58%,
+    #ffdba0 70%,
+    #ffffff 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  background-size: 220% auto;
+  animation: hero-shimmer 7s linear infinite;
+}
+
+.pulse-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(18px);
+  animation: pulse-float 5.5s ease-in-out infinite;
+}
+
+.scan-line {
+  position: relative;
+  overflow: hidden;
+}
+
+.scan-line > * {
+  position: relative;
+  z-index: 1;
+}
+
+.scan-line::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.04) 45%, transparent 60%);
+  transform: translateX(-120%);
+  animation: scan-sweep 4.8s ease-in-out infinite;
+}
+
+@keyframes hero-shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 220% 50%;
+  }
+}
+
+@keyframes pulse-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.42;
+  }
+  50% {
+    transform: translate3d(0, -10px, 0) scale(1.08);
+    opacity: 0.72;
+  }
+}
+
+@keyframes scan-sweep {
+  0%,
+  20% {
+    transform: translateX(-120%);
+  }
+  55% {
+    transform: translateX(120%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
