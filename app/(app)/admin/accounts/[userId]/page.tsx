@@ -167,7 +167,9 @@ export default async function AdminAccountDetailPage(props: {
               <p className="text-sm text-[var(--text-soft)]">Languages</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {user.languages.length ? (
-                  user.languages.map((item) => <Tag key={item.id}>{item.language}</Tag>)
+                  user.languages.map((item: (typeof user.languages)[number]) => (
+                    <Tag key={item.id}>{item.language}</Tag>
+                  ))
                 ) : (
                   <span className="text-sm text-[var(--text-soft)]">None set</span>
                 )}
@@ -178,7 +180,9 @@ export default async function AdminAccountDetailPage(props: {
               <p className="text-sm text-[var(--text-soft)]">Playstyle</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {user.playstyles.length ? (
-                  user.playstyles.map((item) => <Tag key={item.id}>{item.tag}</Tag>)
+                  user.playstyles.map((item: (typeof user.playstyles)[number]) => (
+                    <Tag key={item.id}>{item.tag}</Tag>
+                  ))
                 ) : (
                   <span className="text-sm text-[var(--text-soft)]">None set</span>
                 )}
@@ -189,7 +193,9 @@ export default async function AdminAccountDetailPage(props: {
               <p className="text-sm text-[var(--text-soft)]">Play times</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {user.playTimes.length ? (
-                  user.playTimes.map((item) => <Tag key={item.id}>{item.label}</Tag>)
+                  user.playTimes.map((item: (typeof user.playTimes)[number]) => (
+                    <Tag key={item.id}>{item.label}</Tag>
+                  ))
                 ) : (
                   <span className="text-sm text-[var(--text-soft)]">None set</span>
                 )}
@@ -200,7 +206,7 @@ export default async function AdminAccountDetailPage(props: {
               <p className="text-sm text-[var(--text-soft)]">Games and ranks</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {user.gameProfiles.length ? (
-                  user.gameProfiles.map((item) => (
+                  user.gameProfiles.map((item: (typeof user.gameProfiles)[number]) => (
                     <Tag key={item.id}>
                       {item.game.name} - {item.rankLabel}
                     </Tag>
@@ -300,7 +306,7 @@ export default async function AdminAccountDetailPage(props: {
           </p>
           <div className="mt-5 space-y-4">
             {user.reportsReceived.length ? (
-              user.reportsReceived.map((report) => (
+              user.reportsReceived.map((report: (typeof user.reportsReceived)[number]) => (
                 <div
                   key={report.id}
                   className="rounded-2xl border border-white/8 bg-white/4 p-4"
@@ -334,7 +340,7 @@ export default async function AdminAccountDetailPage(props: {
           </p>
           <div className="mt-5 space-y-4">
             {allMatches.length ? (
-              allMatches.map((match) => {
+              allMatches.map((match: (typeof allMatches)[number]) => {
                 const otherUser =
                   match.userAId === user.id ? match.userB.username : match.userA.username;
 
@@ -359,7 +365,7 @@ export default async function AdminAccountDetailPage(props: {
                     </div>
                     <div className="mt-4 space-y-3">
                       {match.messages.length ? (
-                        match.messages.map((message) => (
+                        match.messages.map((message: (typeof match.messages)[number]) => (
                         <div
                           key={message.id}
                           className="rounded-2xl border border-white/8 bg-[#0d172b] px-4 py-3"
