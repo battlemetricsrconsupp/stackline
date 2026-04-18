@@ -130,6 +130,14 @@ npm run build
 
 Builds the app for production.
 
+On Vercel, the project uses:
+
+```powershell
+npm run vercel-build
+```
+
+That makes sure Prisma Client is generated before the Next.js production build runs.
+
 ```powershell
 npm run start
 ```
@@ -254,7 +262,7 @@ git push
 
 - PostgreSQL runs in Docker on port `5432`
 - Prisma migrations live in [prisma/migrations](C:/Users/ipodm/Desktop/website/prisma/migrations)
-- Prisma config lives in [prisma.config.ts](C:/Users/ipodm/Desktop/website/prisma.config.ts)
+- Prisma config lives in [prisma.config.js](C:/Users/ipodm/Desktop/website/prisma.config.js)
 
 ### Seed Data
 
