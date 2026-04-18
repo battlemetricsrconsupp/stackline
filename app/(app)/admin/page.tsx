@@ -110,9 +110,13 @@ export default async function AdminPage(props: {
       orderBy: { updatedAt: "desc" },
     }),
   ]);
-  const roleMap = await getStoredRolesForUsers(users.map((user) => user.id));
+  const roleMap = await getStoredRolesForUsers(
+    users.map((user: (typeof users)[number]) => user.id)
+  );
 
-  const reportedAccounts = users.filter((account) => account.reportsReceived.length > 0);
+  const reportedAccounts = users.filter(
+    (account: (typeof users)[number]) => account.reportsReceived.length > 0
+  );
 
   return (
     <div className="space-y-6">
@@ -122,7 +126,7 @@ export default async function AdminPage(props: {
           { label: "Games", value: stats.games },
           { label: "Matches", value: stats.matches },
           { label: "Open reports", value: stats.reports },
-        ].map((item) => (
+        ].map((item: { label: string; value: number }) => (
           <div key={item.label} className="panel rounded-[2rem] p-6">
             <p className="text-sm uppercase tracking-[0.25em] text-[var(--text-soft)]">
               {item.label}
@@ -159,7 +163,7 @@ export default async function AdminPage(props: {
           </form>
 
           <div className="mt-6 grid gap-3">
-            {games.map((game) => (
+            {games.map((game: (typeof games)[number]) => (
               <div
                 key={game.id}
                 className="rounded-2xl border border-white/8 bg-white/4 px-4 py-3 text-sm text-white"
@@ -177,7 +181,7 @@ export default async function AdminPage(props: {
           </p>
           <div className="mt-5 space-y-4">
             {reports.length ? (
-              reports.map((report) => (
+              reports.map((report: (typeof reports)[number]) => (
                 <div
                   key={report.id}
                   className="rounded-3xl border border-white/8 bg-white/4 p-4"
@@ -247,7 +251,7 @@ export default async function AdminPage(props: {
 
         <div className="mt-5 space-y-4">
           {users.length ? (
-            users.map((user) => {
+            users.map((user: (typeof users)[number]) => {
               const effectiveRole = getEffectiveRole({
                 email: user.email,
                 role: roleMap.get(user.id),
@@ -376,7 +380,7 @@ export default async function AdminPage(props: {
           </p>
           <div className="mt-5 space-y-4">
             {reportedAccounts.length ? (
-              reportedAccounts.map((account) => (
+              reportedAccounts.map((account: (typeof reportedAccounts)[number]) => (
                 <div
                   key={account.id}
                   className="rounded-3xl border border-white/8 bg-white/4 p-4"
@@ -401,7 +405,8 @@ export default async function AdminPage(props: {
                     </div>
                   </div>
                   <div className="mt-4 space-y-3">
-                    {account.reportsReceived.slice(0, 3).map((report) => (
+                    {account.reportsReceived.slice(0, 3).map(
+                      (report: (typeof account.reportsReceived)[number]) => (
                       <div
                         key={report.id}
                         className="rounded-2xl border border-white/8 bg-[#0d172b] px-4 py-3"
@@ -422,7 +427,8 @@ export default async function AdminPage(props: {
                           </p>
                         ) : null}
                       </div>
-                    ))}
+                      )
+                    )}
                   </div>
                 </div>
               ))
@@ -438,7 +444,7 @@ export default async function AdminPage(props: {
           </p>
           <div className="mt-5 space-y-4">
             {allMatches.length ? (
-              allMatches.map((match) => (
+              allMatches.map((match: (typeof allMatches)[number]) => (
                 <div
                   key={match.id}
                   className="rounded-3xl border border-white/8 bg-white/4 p-4"
@@ -465,7 +471,7 @@ export default async function AdminPage(props: {
                   </div>
                   <div className="mt-4 space-y-3">
                     {match.messages.length ? (
-                      match.messages.map((message) => (
+                      match.messages.map((message: (typeof match.messages)[number]) => (
                         <div
                           key={message.id}
                           className="rounded-2xl border border-white/8 bg-[#0d172b] px-4 py-3"
