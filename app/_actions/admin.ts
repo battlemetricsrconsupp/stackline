@@ -48,17 +48,11 @@ export async function moderateUserAction(formData: FormData) {
 
   const target = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true },
+    select: { id: true, role: true },
   });
   if (!target) return;
 
-  const targetRoleRows = await prisma.$queryRaw<Array<{ role: string | null }>>`
-    SELECT "role" as role
-    FROM "User"
-    WHERE "id" = ${userId}
-    LIMIT 1
-  `;
-  const targetIsOwner = normalizeRole(targetRoleRows[0]?.role) === "OWNER";
+  const targetIsOwner = normalizeRole(target.role) === "OWNER";
 
   if (targetIsOwner && !canManageRoles({ email: viewer.email, role: viewer.role })) {
     return;
@@ -103,19 +97,14 @@ export async function updateUserRoleAction(formData: FormData) {
 
   const target = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true },
+    select: { id: true, role: true },
   });
   if (!target) return;
 
-  const targetRoleRows = await prisma.$queryRaw<Array<{ role: string | null }>>`
-    SELECT "role" as role
-    FROM "User"
-    WHERE "id" = ${userId}
-    LIMIT 1
-  `;
-  const nextRole = normalizeRole(targetRoleRows[0]?.role) === "OWNER" ? "OWNER" : role;
+  const nextRole = normalizeRole(target.role) === "OWNER" ? "OWNER" : role;
 
   await setStoredRoleForUser(userId, nextRole);
 
   revalidatePath("/admin");
+  revalidatePath(`/admin/accounts/${userId}`);
 }

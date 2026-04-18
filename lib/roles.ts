@@ -21,14 +21,12 @@ export function getEffectiveRole(input: {
 }
 
 export async function getStoredRoleForUser(userId: string): Promise<UserRole> {
-  const rows = await prisma.$queryRaw<Array<{ role: string }>>`
-    SELECT role
-    FROM "User"
-    WHERE id = ${userId}
-    LIMIT 1
-  `;
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  });
 
-  return normalizeRole(rows[0]?.role);
+  return normalizeRole(user?.role);
 }
 
 export async function getStoredRolesForUsers(
@@ -49,9 +47,8 @@ export async function getStoredRolesForUsers(
 }
 
 export async function setStoredRoleForUser(userId: string, role: UserRole) {
-  await prisma.$executeRaw`
-    UPDATE "User"
-    SET role = ${role}
-    WHERE id = ${userId}
-  `;
+  await prisma.user.update({
+    where: { id: userId },
+    data: { role },
+  });
 }
