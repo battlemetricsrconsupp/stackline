@@ -41,40 +41,28 @@ export async function getCommunityChatData(limit = 80) {
   await ensureCommunityChatSchema();
 
   const [rows, onlineCountRows] = await Promise.all([
-    prisma.$queryRawUnsafe<
-      Array<{
-        id: string;
-        content: string;
-        createdAt: string;
-        userId: string;
-        username: string;
-        image: string | null;
-        region: string | null;
-        onlineStatus: string | null;
-        currentlyPlaying: string | null;
-        lastActiveAt: string | null;
-      }>
-    >(
-      `
-        SELECT
-          cm."id" as id,
-          cm."content" as content,
-          cm."createdAt" as createdAt,
-          u."id" as userId,
-          u."username" as username,
-          u."image" as image,
-          u."region" as region,
-          u."onlineStatus" as onlineStatus,
-          u."currentlyPlaying" as currentlyPlaying,
-          u."lastActiveAt" as lastActiveAt
-        FROM "CommunityMessage" cm
-        JOIN "User" u ON u."id" = cm."userId"
-        WHERE u."accountStatus" = 'ACTIVE'
-        ORDER BY cm."createdAt" DESC
-        LIMIT ?
-      `,
-      limit
-    ),
+    prisma.communityMessage.findMany({
+      where: {
+        user: {
+          accountStatus: "ACTIVE",
+        },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            image: true,
+            region: true,
+            onlineStatus: true,
+            currentlyPlaying: true,
+            lastActiveAt: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    }),
     prisma.$queryRaw<Array<{ total: number }>>`
       SELECT COUNT(*) as total
       FROM "User"
@@ -91,15 +79,15 @@ export async function getCommunityChatData(limit = 80) {
       .map((row) => ({
         id: row.id,
         content: row.content,
-        createdAt: row.createdAt,
+        createdAt: row.createdAt.toISOString(),
         user: {
-          id: row.userId,
-          username: row.username,
-          image: row.image,
-          region: row.region,
-          onlineStatus: normalizePresenceStatus(row.onlineStatus),
-          currentlyPlaying: row.currentlyPlaying,
-          lastActiveLabel: formatLastActive(row.lastActiveAt ? new Date(row.lastActiveAt) : null),
+          id: row.user.id,
+          username: row.user.username,
+          image: row.user.image,
+          region: row.user.region,
+          onlineStatus: normalizePresenceStatus(row.user.onlineStatus),
+          currentlyPlaying: row.user.currentlyPlaying,
+          lastActiveLabel: formatLastActive(row.user.lastActiveAt),
         },
       })),
   };

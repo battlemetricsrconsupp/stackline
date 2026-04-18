@@ -489,20 +489,17 @@ export async function getUserTrustMap(userIds: string[]) {
     return new Map<string, { reliabilityScore: number; badges: string[]; positiveRatings: number; negativeRatings: number; activeDays: number; activityStreak: number; sessionsPlayed: number }>();
   }
 
-  const placeholders = userIds.map(() => "?").join(", ");
-  const rows = await prisma.$queryRawUnsafe<
-    Array<{
-      id: string;
-      positiveRatings: number | null;
-      negativeRatings: number | null;
-      activeDays: number | null;
-      activityStreak: number | null;
-      sessionsPlayed: number | null;
-    }>
-  >(
-    `SELECT "id", "positiveRatings", "negativeRatings", "activeDays", "activityStreak", "sessionsPlayed" FROM "User" WHERE "id" IN (${placeholders})`,
-    ...userIds
-  );
+  const rows = await prisma.user.findMany({
+    where: { id: { in: userIds } },
+    select: {
+      id: true,
+      positiveRatings: true,
+      negativeRatings: true,
+      activeDays: true,
+      activityStreak: true,
+      sessionsPlayed: true,
+    },
+  });
 
   return new Map(
     rows.map((row) => [

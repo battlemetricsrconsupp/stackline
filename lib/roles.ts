@@ -38,11 +38,10 @@ export async function getStoredRolesForUsers(
     return new Map<string, UserRole>();
   }
 
-  const placeholders = userIds.map(() => "?").join(", ");
-  const rows = await prisma.$queryRawUnsafe<Array<{ id: string; role: string }>>(
-    `SELECT id, role FROM "User" WHERE id IN (${placeholders})`,
-    ...userIds
-  );
+  const rows = await prisma.user.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, role: true },
+  });
 
   return new Map<string, UserRole>(
     rows.map((row) => [row.id, normalizeRole(row.role)] as const)
