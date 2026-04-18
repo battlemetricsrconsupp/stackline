@@ -24,7 +24,8 @@ export default async function ProductLayout({
     listNotifications(viewer.id),
   ]);
   const messageAlerts = matches.filter(
-    (match) => match.lastMessage && match.lastMessage.senderId !== viewer.id
+    (match: (typeof matches)[number]) =>
+      match.lastMessage && match.lastMessage.senderId !== viewer.id
   ).length;
 
   return (
@@ -35,7 +36,7 @@ export default async function ProductLayout({
       lookingNow={lookingNowState.isLookingNow}
       totalLookingNow={liveQueue.totalLookingNow}
       pendingInvites={pendingInvites}
-      notifications={notifications.map((notification) => ({
+      notifications={notifications.map((notification: (typeof notifications)[number]) => ({
         ...notification,
         isRead: Boolean(notification.isRead),
       }))}
