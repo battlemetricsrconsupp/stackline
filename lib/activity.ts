@@ -10,6 +10,15 @@ export type PresenceInfo = {
   lastActiveAt: Date | null;
 };
 
+export type LiveActivitySummary = {
+  onlineCount: number;
+  awayCount: number;
+  perGame: Array<{
+    gameName: string;
+    total: number;
+  }>;
+};
+
 export async function ensurePresenceColumns() {
   return;
 }
@@ -22,7 +31,7 @@ function normalizePresenceStatus(status?: string | null): PresenceStatus {
   return "Online";
 }
 
-export async function getPresenceMap(userIds: string[]) {
+export async function getPresenceMap(userIds: string[]): Promise<Map<string, PresenceInfo>> {
   if (!userIds.length) {
     return new Map<string, PresenceInfo>();
   }
@@ -49,7 +58,7 @@ export async function getPresenceMap(userIds: string[]) {
   );
 }
 
-export async function getPresenceForUser(userId: string) {
+export async function getPresenceForUser(userId: string): Promise<PresenceInfo> {
   const presenceMap = await getPresenceMap([userId]);
   return (
     presenceMap.get(userId) ?? {
@@ -124,7 +133,7 @@ export function formatLastActive(lastActiveAt: Date | null) {
   return `Active ${days}d ago`;
 }
 
-export async function getLiveActivitySummary() {
+export async function getLiveActivitySummary(): Promise<LiveActivitySummary> {
   try {
     const [onlineCount, awayCount, perGameRows] = await Promise.all([
       prisma.user.count({
