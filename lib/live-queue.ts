@@ -121,16 +121,17 @@ async function expireInactiveLookingNowUsers() {
   await ensureLiveQueueSchema();
 
   try {
-    await prisma.$executeRawUnsafe(`
-      UPDATE "User"
-      SET "isLookingNow" = false,
-          "lookingNowStartedAt" = NULL
-      WHERE "isLookingNow" = true
-        AND (
-          "lastActiveAt" IS NULL
-          OR "lastActiveAt" < NOW() - INTERVAL '${LIVE_QUEUE_TIMEOUT_MINUTES} minutes'
-        )
-    `);
+    const cutoff = new Date(Date.now() - LIVE_QUEUE_TIMEOUT_MINUTES * 60_000);
+    await prisma.user.updateMany({
+      where: {
+        isLookingNow: true,
+        OR: [{ lastActiveAt: null }, { lastActiveAt: { lt: cutoff } }],
+      },
+      data: {
+        isLookingNow: false,
+        lookingNowStartedAt: null,
+      },
+    });
   } catch {
     return;
   }
@@ -187,22 +188,24 @@ export async function toggleLookingNow(userId: string, enabled: boolean) {
   await touchUserActivity(userId, { onlineStatus: "Online" });
 
   if (enabled) {
-    await prisma.$executeRaw`
-      UPDATE "User"
-      SET "isLookingNow" = true,
-          "lookingNowStartedAt" = CURRENT_TIMESTAMP,
-          "onlineStatus" = 'Online'
-      WHERE "id" = ${userId}
-    `;
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        isLookingNow: true,
+        lookingNowStartedAt: new Date(),
+        onlineStatus: "Online",
+      },
+    });
     return;
   }
 
-  await prisma.$executeRaw`
-    UPDATE "User"
-    SET "isLookingNow" = false,
-        "lookingNowStartedAt" = NULL
-    WHERE "id" = ${userId}
-  `;
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      isLookingNow: false,
+      lookingNowStartedAt: null,
+    },
+  });
 }
 
 function buildSnapshot(user: {
@@ -393,20 +396,28 @@ export async function sendPlayInvite(input: {
   await ensureEngagementSchema();
   await touchUserActivity(input.senderId, { onlineStatus: "Online" });
 
-  await prisma.$executeRaw`
-    UPDATE "PlayInvite"
-    SET "status" = 'DECLINED',
-        "respondedAt" = CURRENT_TIMESTAMP
-    WHERE "senderId" = ${input.senderId}
-      AND "receiverId" = ${input.receiverId}
-      AND "status" = 'PENDING'
-  `;
+  await prisma.playInvite.updateMany({
+    where: {
+      senderId: input.senderId,
+      receiverId: input.receiverId,
+      status: "PENDING",
+    },
+    data: {
+      status: "DECLINED",
+      respondedAt: new Date(),
+    },
+  });
 
   const id = randomUUID();
-  await prisma.$executeRaw`
-    INSERT INTO "PlayInvite" ("id", "senderId", "receiverId", "gameSlug", "status")
-    VALUES (${id}, ${input.senderId}, ${input.receiverId}, ${input.gameSlug ?? null}, 'PENDING')
-  `;
+  await prisma.playInvite.create({
+    data: {
+      id,
+      senderId: input.senderId,
+      receiverId: input.receiverId,
+      gameSlug: input.gameSlug ?? null,
+      status: "PENDING",
+    },
+  });
 
   const sender = await prisma.user.findUnique({
     where: { id: input.senderId },
@@ -430,46 +441,46 @@ export async function sendPlayInvite(input: {
 export async function getPendingPlayInvites(userId: string) {
   await ensureLiveQueueSchema();
 
-  const rows = await prisma.$queryRaw<Array<{
-    id: string;
-    senderId: string;
-    receiverId: string;
-    gameSlug: string | null;
-    status: InviteStatus;
-    createdAt: Date;
-    senderUsername: string;
-    senderRegion: string | null;
-    senderOnlineStatus: string | null;
-  }>>`
-    SELECT
-      pi."id" as id,
-      pi."senderId" as senderId,
-      pi."receiverId" as receiverId,
-      pi."gameSlug" as gameSlug,
-      pi."status" as status,
-      pi."createdAt" as createdAt,
-      u."username" as senderUsername,
-      u."region" as senderRegion,
-      u."onlineStatus" as senderOnlineStatus
-    FROM "PlayInvite" pi
-    JOIN "User" u ON u."id" = pi."senderId"
-    WHERE pi."receiverId" = ${userId}
-      AND pi."status" = 'PENDING'
-    ORDER BY pi."createdAt" DESC
-  `;
-
-  return rows;
+  return prisma.playInvite.findMany({
+    where: {
+      receiverId: userId,
+      status: "PENDING",
+    },
+    include: {
+      sender: {
+        select: {
+          username: true,
+          region: true,
+          onlineStatus: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  }).then((rows) =>
+    rows.map((row) => ({
+      id: row.id,
+      senderId: row.senderId,
+      receiverId: row.receiverId,
+      gameSlug: row.gameSlug,
+      status: row.status as InviteStatus,
+      createdAt: row.createdAt,
+      senderUsername: row.sender.username,
+      senderRegion: row.sender.region,
+      senderOnlineStatus: row.sender.onlineStatus,
+    }))
+  );
 }
 
 export async function getOutgoingPendingInviteIds(userId: string) {
   await ensureLiveQueueSchema();
 
-  const rows = await prisma.$queryRaw<Array<{ receiverId: string }>>`
-    SELECT "receiverId" as receiverId
-    FROM "PlayInvite"
-    WHERE "senderId" = ${userId}
-      AND "status" = 'PENDING'
-  `;
+  const rows = await prisma.playInvite.findMany({
+    where: {
+      senderId: userId,
+      status: "PENDING",
+    },
+    select: { receiverId: true },
+  });
 
   return new Set(rows.map((row) => row.receiverId));
 }
@@ -483,31 +494,30 @@ export async function respondToPlayInvite(input: {
   await ensureEngagementSchema();
   await touchUserActivity(input.receiverId, { onlineStatus: "Online" });
 
-  const rows = await prisma.$queryRaw<Array<{
-    id: string;
-    senderId: string;
-    receiverId: string;
-    gameSlug: string | null;
-  }>>`
-    SELECT "id", "senderId", "receiverId", "gameSlug"
-    FROM "PlayInvite"
-    WHERE "id" = ${input.inviteId}
-      AND "receiverId" = ${input.receiverId}
-      AND "status" = 'PENDING'
-    LIMIT 1
-  `;
-
-  const invite = rows[0];
+  const invite = await prisma.playInvite.findFirst({
+    where: {
+      id: input.inviteId,
+      receiverId: input.receiverId,
+      status: "PENDING",
+    },
+    select: {
+      id: true,
+      senderId: true,
+      receiverId: true,
+      gameSlug: true,
+    },
+  });
   if (!invite) {
     return null;
   }
 
-  await prisma.$executeRaw`
-    UPDATE "PlayInvite"
-    SET "status" = ${input.accept ? "ACCEPTED" : "DECLINED"},
-        "respondedAt" = CURRENT_TIMESTAMP
-    WHERE "id" = ${input.inviteId}
-  `;
+  await prisma.playInvite.update({
+    where: { id: input.inviteId },
+    data: {
+      status: input.accept ? "ACCEPTED" : "DECLINED",
+      respondedAt: new Date(),
+    },
+  });
 
   if (!input.accept) {
     await trackAnalyticsEvent("invite_declined", input.receiverId, {

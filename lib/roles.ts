@@ -5,6 +5,12 @@ import { prisma } from "@/lib/prisma";
 export const USER_ROLES = ["USER", "MODERATOR", "OWNER"] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
+const OWNER_EMAILS = new Set([
+  "nova@stackline.gg",
+  "miko@stackline.gg",
+  "sage@stackline.gg",
+]);
+
 export function normalizeRole(role?: string | null): UserRole {
   if (role === "OWNER" || role === "MODERATOR") {
     return role;
@@ -17,6 +23,10 @@ export function getEffectiveRole(input: {
   email?: string | null;
   role?: string | null;
 }): UserRole {
+  if (input.email && OWNER_EMAILS.has(input.email.toLowerCase())) {
+    return "OWNER";
+  }
+
   return normalizeRole(input.role);
 }
 

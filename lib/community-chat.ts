@@ -40,7 +40,7 @@ function normalizePresenceStatus(status?: string | null): "Online" | "Away" | "O
 export async function getCommunityChatData(limit = 80) {
   await ensureCommunityChatSchema();
 
-  const [rows, onlineCountRows] = await Promise.all([
+  const [rows, onlineCount] = await Promise.all([
     prisma.communityMessage.findMany({
       where: {
         user: {
@@ -63,17 +63,17 @@ export async function getCommunityChatData(limit = 80) {
       orderBy: { createdAt: "desc" },
       take: limit,
     }),
-    prisma.$queryRaw<Array<{ total: number }>>`
-      SELECT COUNT(*) as total
-      FROM "User"
-      WHERE "accountStatus" = 'ACTIVE'
-        AND "onboardingCompleted" = true
-        AND "onlineStatus" = 'Online'
-    `,
+    prisma.user.count({
+      where: {
+        accountStatus: "ACTIVE",
+        onboardingCompleted: true,
+        onlineStatus: "Online",
+      },
+    }),
   ]);
 
   return {
-    onlineCount: Number(onlineCountRows[0]?.total ?? 0),
+    onlineCount,
     messages: rows
       .reverse()
       .map((row) => ({
@@ -103,11 +103,13 @@ export async function postCommunityMessage(userId: string, content: string) {
 
   await touchUserActivity(userId, { onlineStatus: "Online" });
 
-  const id = randomUUID();
-  await prisma.$executeRaw`
-    INSERT INTO "CommunityMessage" ("id", "userId", "content")
-    VALUES (${id}, ${userId}, ${cleanedContent})
-  `;
+  await prisma.communityMessage.create({
+    data: {
+      id: randomUUID(),
+      userId,
+      content: cleanedContent,
+    },
+  });
 
   const payload = await getCommunityChatData(1);
   return payload.messages[0] ?? null;

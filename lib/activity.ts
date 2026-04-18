@@ -135,7 +135,7 @@ export function formatLastActive(lastActiveAt: Date | null) {
 
 export async function getLiveActivitySummary(): Promise<LiveActivitySummary> {
   try {
-    const [onlineCount, awayCount, perGameRows] = await Promise.all([
+    const [onlineCount, awayCount, onlineUsers] = await Promise.all([
       prisma.user.count({
         where: {
           accountStatus: "ACTIVE",
@@ -152,28 +152,50 @@ export async function getLiveActivitySummary(): Promise<LiveActivitySummary> {
           onlineStatus: "Away",
         },
       }),
-      prisma.$queryRaw<Array<{ gameName: string; total: bigint | number }>>`
-        SELECT g."name" as "gameName", COUNT(DISTINCT u."id") as total
-        FROM "User" u
-        JOIN "UserGameProfile" ugp ON ugp."userId" = u."id"
-        JOIN "Game" g ON g."id" = ugp."gameId"
-        WHERE u."accountStatus" = 'ACTIVE'
-          AND u."onboardingCompleted" = true
-          AND u."lookingForGroup" = true
-          AND u."onlineStatus" = 'Online'
-        GROUP BY g."id", g."name"
-        ORDER BY total DESC, g."name" ASC
-        LIMIT 4
-      `,
+      prisma.user.findMany({
+        where: {
+          accountStatus: "ACTIVE",
+          onboardingCompleted: true,
+          lookingForGroup: true,
+          onlineStatus: "Online",
+        },
+        select: {
+          gameProfiles: {
+            select: {
+              game: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      }),
     ]);
+
+    const perGameCounts = new Map<string, number>();
+    for (const user of onlineUsers) {
+      const seenGames = new Set<string>();
+      for (const profile of user.gameProfiles) {
+        const gameName = profile.game.name;
+        if (seenGames.has(gameName)) {
+          continue;
+        }
+        seenGames.add(gameName);
+        perGameCounts.set(gameName, (perGameCounts.get(gameName) ?? 0) + 1);
+      }
+    }
 
     return {
       onlineCount,
       awayCount,
-      perGame: perGameRows.map((row) => ({
-        gameName: row.gameName,
-        total: Number(row.total),
-      })),
+      perGame: Array.from(perGameCounts.entries())
+        .map(([gameName, total]) => ({
+          gameName,
+          total,
+        }))
+        .sort((a, b) => b.total - a.total || a.gameName.localeCompare(b.gameName))
+        .slice(0, 4),
     };
   } catch {
     return {

@@ -66,15 +66,14 @@ export async function trackAnalyticsEvent(
 ) {
   await ensureEngagementSchema();
 
-  await prisma.$executeRaw`
-    INSERT INTO "AnalyticsEvent" ("id", "type", "userId", "metadata")
-    VALUES (
-      ${randomUUID()},
-      ${type},
-      ${userId ?? null},
-      ${metadata ? JSON.stringify(metadata) : null}
-    )
-  `;
+  await prisma.analyticsEvent.create({
+    data: {
+      id: randomUUID(),
+      type,
+      userId: userId ?? null,
+      metadata: metadata ? JSON.stringify(metadata) : null,
+    },
+  });
 }
 
 export async function createNotification(input: {
@@ -86,68 +85,54 @@ export async function createNotification(input: {
 }) {
   await ensureEngagementSchema();
 
-  await prisma.$executeRaw`
-    INSERT INTO "Notification" ("id", "userId", "type", "title", "body", "link")
-    VALUES (
-      ${randomUUID()},
-      ${input.userId},
-      ${input.type},
-      ${input.title},
-      ${input.body},
-      ${input.link ?? null}
-    )
-  `;
+  await prisma.notification.create({
+    data: {
+      id: randomUUID(),
+      userId: input.userId,
+      type: input.type,
+      title: input.title,
+      body: input.body,
+      link: input.link ?? null,
+    },
+  });
 }
 
 async function hasRecentNotification(userId: string, type: string, bodyLike: string, hours: number) {
-  const rows = await prisma.$queryRaw<Array<{ total: number }>>`
-    SELECT COUNT(*) as total
-    FROM "Notification"
-    WHERE "userId" = ${userId}
-      AND "type" = ${type}
-      AND "body" = ${bodyLike}
-      AND "createdAt" >= NOW() - (${hours} * INTERVAL '1 hour')
-  `;
+  const cutoff = new Date(Date.now() - hours * 60 * 60_000);
+  const total = await prisma.notification.count({
+    where: {
+      userId,
+      type,
+      body: bodyLike,
+      createdAt: { gte: cutoff },
+    },
+  });
 
-  return Number(rows[0]?.total ?? 0) > 0;
+  return total > 0;
 }
 
 export async function listNotifications(userId: string) {
   await ensureEngagementSchema();
 
-  return prisma.$queryRaw<Array<{
-    id: string;
-    type: string;
-    title: string;
-    body: string;
-    link: string | null;
-    isRead: number;
-    createdAt: Date;
-  }>>`
-    SELECT
-      "id" as id,
-      "type" as type,
-      "title" as title,
-      "body" as body,
-      "link" as link,
-      "isRead" as isRead,
-      "createdAt" as createdAt
-    FROM "Notification"
-    WHERE "userId" = ${userId}
-    ORDER BY "createdAt" DESC
-    LIMIT 12
-  `;
+  return prisma.notification.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    take: 12,
+  });
 }
 
 export async function markNotificationsRead(userId: string) {
   await ensureEngagementSchema();
 
-  await prisma.$executeRaw`
-    UPDATE "Notification"
-    SET "isRead" = true
-    WHERE "userId" = ${userId}
-      AND "isRead" = false
-  `;
+  await prisma.notification.updateMany({
+    where: {
+      userId,
+      isRead: false,
+    },
+    data: {
+      isRead: true,
+    },
+  });
 }
 
 export async function createPlaySessionFromInvite(input: {
@@ -159,49 +144,40 @@ export async function createPlaySessionFromInvite(input: {
 }) {
   await ensureEngagementSchema();
 
-  const existing = await prisma.$queryRaw<Array<{ id: string }>>`
-    SELECT "id" as id
-    FROM "PlaySession"
-    WHERE "playInviteId" = ${input.inviteId}
-    LIMIT 1
-  `;
+  const existing = await prisma.playSession.findFirst({
+    where: { playInviteId: input.inviteId },
+    select: { id: true },
+  });
 
-  if (existing[0]?.id) {
-    return existing[0].id;
+  if (existing?.id) {
+    return existing.id;
   }
 
   const sessionId = randomUUID();
   const promptAfter = new Date(Date.now() + 45 * 60_000).toISOString();
   const [userAId, userBId] = [input.senderId, input.receiverId].sort();
 
-  await prisma.$executeRaw`
-    INSERT INTO "PlaySession" (
-      "id",
-      "playInviteId",
-      "matchId",
-      "userAId",
-      "userBId",
-      "initiatorId",
-      "gameSlug",
-      "promptAfterAt"
-    )
-    VALUES (
-      ${sessionId},
-      ${input.inviteId},
-      ${input.matchId},
-      ${userAId},
-      ${userBId},
-      ${input.senderId},
-      ${input.gameSlug ?? null},
-      ${promptAfter}
-    )
-  `;
+  await prisma.playSession.create({
+    data: {
+      id: sessionId,
+      playInviteId: input.inviteId,
+      matchId: input.matchId,
+      userAId,
+      userBId,
+      initiatorId: input.senderId,
+      gameSlug: input.gameSlug ?? null,
+      promptAfterAt: new Date(promptAfter),
+    },
+  });
 
-  await prisma.$executeRaw`
-    UPDATE "User"
-    SET "sessionsPlayed" = COALESCE("sessionsPlayed", 0) + 1
-    WHERE "id" IN (${input.senderId}, ${input.receiverId})
-  `;
+  await prisma.user.updateMany({
+    where: {
+      id: { in: [input.senderId, input.receiverId] },
+    },
+    data: {
+      sessionsPlayed: { increment: 1 },
+    },
+  });
 
   await trackAnalyticsEvent("session_started", input.senderId, {
     receiverId: input.receiverId,
@@ -212,20 +188,28 @@ export async function createPlaySessionFromInvite(input: {
 }
 
 async function recalculateUserRatings(userId: string) {
-  const rows = await prisma.$queryRaw<Array<{ positive: number; negative: number }>>`
-    SELECT
-      SUM(CASE WHEN "value" = 1 THEN 1 ELSE 0 END) as positive,
-      SUM(CASE WHEN "value" = -1 THEN 1 ELSE 0 END) as negative
-    FROM "TeammateRating"
-    WHERE "ratedUserId" = ${userId}
-  `;
+  const [positive, negative] = await Promise.all([
+    prisma.teammateRating.count({
+      where: {
+        ratedUserId: userId,
+        value: 1,
+      },
+    }),
+    prisma.teammateRating.count({
+      where: {
+        ratedUserId: userId,
+        value: -1,
+      },
+    }),
+  ]);
 
-  await prisma.$executeRaw`
-    UPDATE "User"
-    SET "positiveRatings" = ${Number(rows[0]?.positive ?? 0)},
-        "negativeRatings" = ${Number(rows[0]?.negative ?? 0)}
-    WHERE "id" = ${userId}
-  `;
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      positiveRatings: positive,
+      negativeRatings: negative,
+    },
+  });
 }
 
 export async function submitTeammateRating(input: {
@@ -236,19 +220,15 @@ export async function submitTeammateRating(input: {
 }) {
   await ensureEngagementSchema();
 
-  const sessions = await prisma.$queryRaw<Array<{
-    id: string;
-    userAId: string;
-    userBId: string;
-    status: SessionStatus;
-  }>>`
-    SELECT "id", "userAId", "userBId", "status"
-    FROM "PlaySession"
-    WHERE "id" = ${input.sessionId}
-    LIMIT 1
-  `;
-
-  const session = sessions[0];
+  const session = await prisma.playSession.findUnique({
+    where: { id: input.sessionId },
+    select: {
+      id: true,
+      userAId: true,
+      userBId: true,
+      status: true,
+    },
+  });
   if (!session) {
     return null;
   }
@@ -256,22 +236,35 @@ export async function submitTeammateRating(input: {
   const ratedUserId =
     session.userAId === input.raterId ? session.userBId : session.userAId;
 
-  await prisma.$executeRaw`
-    INSERT INTO "TeammateRating" ("id", "sessionId", "raterId", "ratedUserId", "value", "note")
-    VALUES (
-      ${randomUUID()},
-      ${input.sessionId},
-      ${input.raterId},
-      ${ratedUserId},
-      ${input.positive ? 1 : -1},
-      ${input.note ?? null}
-    )
-    ON CONFLICT("sessionId", "raterId")
-    DO UPDATE SET
-      "value" = excluded."value",
-      "note" = excluded."note",
-      "createdAt" = CURRENT_TIMESTAMP
-  `;
+  const existingRating = await prisma.teammateRating.findFirst({
+    where: {
+      sessionId: input.sessionId,
+      raterId: input.raterId,
+    },
+    select: { id: true },
+  });
+
+  if (existingRating) {
+    await prisma.teammateRating.update({
+      where: { id: existingRating.id },
+      data: {
+        value: input.positive ? 1 : -1,
+        note: input.note ?? null,
+        createdAt: new Date(),
+      },
+    });
+  } else {
+    await prisma.teammateRating.create({
+      data: {
+        id: randomUUID(),
+        sessionId: input.sessionId,
+        raterId: input.raterId,
+        ratedUserId,
+        value: input.positive ? 1 : -1,
+        note: input.note ?? null,
+      },
+    });
+  }
 
   await recalculateUserRatings(ratedUserId);
   await createNotification({
@@ -294,60 +287,63 @@ export async function submitTeammateRating(input: {
 export async function getPendingSessionPrompts(userId: string) {
   await ensureEngagementSchema();
 
-  const rows = await prisma.$queryRaw<Array<{
-    id: string;
-    matchId: string | null;
-    gameSlug: string | null;
-    status: SessionStatus;
-    startedAt: Date;
-    promptAfterAt: Date;
-    userAId: string;
-    userBId: string;
-    initiatorId: string;
-    otherUsername: string;
-    alreadyRated: number;
-    alreadyConfirmed: string | null;
-  }>>`
-    SELECT
-      ps."id" as id,
-      ps."matchId" as matchId,
-      ps."gameSlug" as gameSlug,
-      ps."status" as status,
-      ps."startedAt" as startedAt,
-      ps."promptAfterAt" as promptAfterAt,
-      ps."userAId" as userAId,
-      ps."userBId" as userBId,
-      ps."initiatorId" as initiatorId,
-      CASE WHEN ps."userAId" = ${userId} THEN ub."username" ELSE ua."username" END as otherUsername,
-      (
-        SELECT COUNT(*)
-        FROM "TeammateRating" tr
-        WHERE tr."sessionId" = ps."id"
-          AND tr."raterId" = ${userId}
-      ) as alreadyRated,
-      CASE
-        WHEN ps."userAId" = ${userId} THEN ps."userAConfirmedAt"
-        ELSE ps."userBConfirmedAt"
-      END as alreadyConfirmed
-    FROM "PlaySession" ps
-    JOIN "User" ua ON ua."id" = ps."userAId"
-    JOIN "User" ub ON ub."id" = ps."userBId"
-    WHERE (ps."userAId" = ${userId} OR ps."userBId" = ${userId})
-      AND ps."promptAfterAt" <= NOW()
-      AND (
-        ps."status" = 'PENDING'
-        OR (ps."status" = 'COMPLETED' AND (
-          SELECT COUNT(*)
-          FROM "TeammateRating" tr
-          WHERE tr."sessionId" = ps."id"
-            AND tr."raterId" = ${userId}
-        ) = 0)
-      )
-    ORDER BY ps."startedAt" DESC
-    LIMIT 3
-  `;
+  const sessions = await prisma.playSession.findMany({
+    where: {
+      OR: [{ userAId: userId }, { userBId: userId }],
+      promptAfterAt: { lte: new Date() },
+      status: { in: ["PENDING", "COMPLETED"] },
+    },
+    include: {
+      userA: {
+        select: {
+          username: true,
+        },
+      },
+      userB: {
+        select: {
+          username: true,
+        },
+      },
+    },
+    orderBy: { startedAt: "desc" },
+    take: 12,
+  });
 
-  return rows;
+  const ratings = sessions.length
+    ? await prisma.teammateRating.findMany({
+        where: {
+          sessionId: { in: sessions.map((session) => session.id) },
+          raterId: userId,
+        },
+        select: {
+          sessionId: true,
+        },
+      })
+    : [];
+  const ratedSessionIds = new Set(ratings.map((rating) => rating.sessionId));
+
+  return sessions
+    .filter((session) => session.status === "PENDING" || !ratedSessionIds.has(session.id))
+    .slice(0, 3)
+    .map((session) => {
+      const isUserA = session.userAId === userId;
+      return {
+        id: session.id,
+        matchId: session.matchId,
+        gameSlug: session.gameSlug,
+        status: session.status as SessionStatus,
+        startedAt: session.startedAt,
+        promptAfterAt: session.promptAfterAt,
+        userAId: session.userAId,
+        userBId: session.userBId,
+        initiatorId: session.initiatorId,
+        otherUsername: isUserA ? session.userB.username : session.userA.username,
+        alreadyRated: ratedSessionIds.has(session.id) ? 1 : 0,
+        alreadyConfirmed: (isUserA ? session.userAConfirmedAt : session.userBConfirmedAt)
+          ? "confirmed"
+          : null,
+      };
+    });
 }
 
 export async function respondToSessionPrompt(input: {
@@ -357,45 +353,29 @@ export async function respondToSessionPrompt(input: {
 }) {
   await ensureEngagementSchema();
 
-  const sessions = await prisma.$queryRaw<Array<{
-    id: string;
-    userAId: string;
-    userBId: string;
-    matchId: string | null;
-    status: SessionStatus;
-  }>>`
-    SELECT "id", "userAId", "userBId", "matchId", "status"
-    FROM "PlaySession"
-    WHERE "id" = ${input.sessionId}
-    LIMIT 1
-  `;
-  const session = sessions[0];
+  const session = await prisma.playSession.findUnique({
+    where: { id: input.sessionId },
+    select: {
+      id: true,
+      userAId: true,
+      userBId: true,
+      matchId: true,
+      status: true,
+    },
+  });
   if (!session) return null;
 
   const otherUserId = session.userAId === input.userId ? session.userBId : session.userAId;
-  if (session.userAId === input.userId) {
-    await prisma.$executeRaw`
-      UPDATE "PlaySession"
-      SET "userAConfirmedAt" = CURRENT_TIMESTAMP,
-          "status" = ${input.played ? "COMPLETED" : "NO_SHOW"},
-          "completedAt" = CASE
-            WHEN ${input.played ? "COMPLETED" : "NO_SHOW"} = 'COMPLETED' THEN CURRENT_TIMESTAMP
-            ELSE "completedAt"
-          END
-      WHERE "id" = ${input.sessionId}
-    `;
-  } else {
-    await prisma.$executeRaw`
-      UPDATE "PlaySession"
-      SET "userBConfirmedAt" = CURRENT_TIMESTAMP,
-          "status" = ${input.played ? "COMPLETED" : "NO_SHOW"},
-          "completedAt" = CASE
-            WHEN ${input.played ? "COMPLETED" : "NO_SHOW"} = 'COMPLETED' THEN CURRENT_TIMESTAMP
-            ELSE "completedAt"
-          END
-      WHERE "id" = ${input.sessionId}
-    `;
-  }
+  await prisma.playSession.update({
+    where: { id: input.sessionId },
+    data: {
+      ...(session.userAId === input.userId
+        ? { userAConfirmedAt: new Date() }
+        : { userBConfirmedAt: new Date() }),
+      status: input.played ? "COMPLETED" : "NO_SHOW",
+      completedAt: input.played ? new Date() : undefined,
+    },
+  });
 
   if (!input.played) {
     const existingReport = await prisma.report.findFirst({
@@ -429,45 +409,62 @@ export async function respondToSessionPrompt(input: {
 export async function getRecentlyPlayedWith(userId: string) {
   await ensureEngagementSchema();
 
-  const sessions = await prisma.$queryRaw<Array<{
-    sessionId: string;
-    matchId: string | null;
-    startedAt: Date;
-    otherUserId: string;
-    otherUsername: string;
-    otherRegion: string | null;
-    gameSlug: string | null;
-    positiveRatings: number | null;
-    negativeRatings: number | null;
-    activeDays: number | null;
-    activityStreak: number | null;
-    sessionsPlayed: number | null;
-  }>>`
-    SELECT
-      ps."id" as sessionId,
-      ps."matchId" as matchId,
-      ps."startedAt" as startedAt,
-      CASE WHEN ps."userAId" = ${userId} THEN ps."userBId" ELSE ps."userAId" END as otherUserId,
-      CASE WHEN ps."userAId" = ${userId} THEN ub."username" ELSE ua."username" END as otherUsername,
-      CASE WHEN ps."userAId" = ${userId} THEN ub."region" ELSE ua."region" END as otherRegion,
-      ps."gameSlug" as gameSlug,
-      CASE WHEN ps."userAId" = ${userId} THEN ub."positiveRatings" ELSE ua."positiveRatings" END as positiveRatings,
-      CASE WHEN ps."userAId" = ${userId} THEN ub."negativeRatings" ELSE ua."negativeRatings" END as negativeRatings,
-      CASE WHEN ps."userAId" = ${userId} THEN ub."activeDays" ELSE ua."activeDays" END as activeDays,
-      CASE WHEN ps."userAId" = ${userId} THEN ub."activityStreak" ELSE ua."activityStreak" END as activityStreak,
-      CASE WHEN ps."userAId" = ${userId} THEN ub."sessionsPlayed" ELSE ua."sessionsPlayed" END as sessionsPlayed
-    FROM "PlaySession" ps
-    JOIN "User" ua ON ua."id" = ps."userAId"
-    JOIN "User" ub ON ub."id" = ps."userBId"
-    WHERE (ps."userAId" = ${userId} OR ps."userBId" = ${userId})
-      AND ps."status" = 'COMPLETED'
-    ORDER BY ps."startedAt" DESC
-    LIMIT 6
-  `;
+  const sessions = await prisma.playSession.findMany({
+    where: {
+      OR: [{ userAId: userId }, { userBId: userId }],
+      status: "COMPLETED",
+    },
+    include: {
+      userA: {
+        select: {
+          id: true,
+          username: true,
+          region: true,
+          positiveRatings: true,
+          negativeRatings: true,
+          activeDays: true,
+          activityStreak: true,
+          sessionsPlayed: true,
+        },
+      },
+      userB: {
+        select: {
+          id: true,
+          username: true,
+          region: true,
+          positiveRatings: true,
+          negativeRatings: true,
+          activeDays: true,
+          activityStreak: true,
+          sessionsPlayed: true,
+        },
+      },
+    },
+    orderBy: { startedAt: "desc" },
+    take: 6,
+  });
 
-  const presenceMap = await getPresenceMap(sessions.map((session) => session.otherUserId));
+  const normalizedSessions = sessions.map((session) => {
+    const otherUser = session.userAId === userId ? session.userB : session.userA;
+    return {
+      sessionId: session.id,
+      matchId: session.matchId,
+      startedAt: session.startedAt,
+      otherUserId: otherUser.id,
+      otherUsername: otherUser.username,
+      otherRegion: otherUser.region,
+      gameSlug: session.gameSlug,
+      positiveRatings: otherUser.positiveRatings,
+      negativeRatings: otherUser.negativeRatings,
+      activeDays: otherUser.activeDays,
+      activityStreak: otherUser.activityStreak,
+      sessionsPlayed: otherUser.sessionsPlayed,
+    };
+  });
 
-  return sessions.map((session) => ({
+  const presenceMap = await getPresenceMap(normalizedSessions.map((session) => session.otherUserId));
+
+  return normalizedSessions.map((session) => ({
     ...session,
     positiveRatings: Number(session.positiveRatings ?? 0),
     negativeRatings: Number(session.negativeRatings ?? 0),
@@ -595,26 +592,49 @@ export async function getPersonalizedSections(viewerId: string) {
       })
     : [];
 
-  const playedWellWithRows = await prisma.$queryRaw<Array<{
-    otherUserId: string;
-    positiveRatingsFromViewer: number;
-  }>>`
-    SELECT
-      CASE WHEN ps."userAId" = ${viewerId} THEN ps."userBId" ELSE ps."userAId" END as otherUserId,
-      COUNT(*) as positiveRatingsFromViewer
-    FROM "PlaySession" ps
-    JOIN "TeammateRating" tr ON tr."sessionId" = ps."id"
-    WHERE (ps."userAId" = ${viewerId} OR ps."userBId" = ${viewerId})
-      AND tr."raterId" = ${viewerId}
-      AND tr."value" = 1
-    GROUP BY otherUserId
-    ORDER BY positiveRatingsFromViewer DESC
-    LIMIT 4
-  `;
+  const positiveRatings = await prisma.teammateRating.findMany({
+    where: {
+      raterId: viewerId,
+      value: 1,
+    },
+    select: {
+      sessionId: true,
+    },
+  });
 
-  const playedWellWithUsers = playedWellWithRows.length
+  const ratedSessions = positiveRatings.length
+    ? await prisma.playSession.findMany({
+        where: {
+          id: { in: positiveRatings.map((rating) => rating.sessionId) },
+        },
+        select: {
+          id: true,
+          userAId: true,
+          userBId: true,
+        },
+      })
+    : [];
+
+  const sessionMap = new Map(ratedSessions.map((session) => [session.id, session] as const));
+  const playedWellWithCounts = new Map<string, number>();
+  for (const rating of positiveRatings) {
+    const session = sessionMap.get(rating.sessionId);
+    if (!session) {
+      continue;
+    }
+    const otherUserId =
+      session.userAId === viewerId ? session.userBId : session.userAId;
+    playedWellWithCounts.set(otherUserId, (playedWellWithCounts.get(otherUserId) ?? 0) + 1);
+  }
+
+  const playedWellWithIds = Array.from(playedWellWithCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([otherUserId]) => otherUserId);
+
+  const playedWellWithUsers = playedWellWithIds.length
     ? await prisma.user.findMany({
-        where: { id: { in: playedWellWithRows.map((row) => row.otherUserId) } },
+        where: { id: { in: playedWellWithIds } },
         select: {
           id: true,
           username: true,
@@ -664,19 +684,21 @@ export async function refreshEngagementNotifications(userId: string) {
 
   const primaryProfile = viewer.gameProfiles[0];
   if (primaryProfile) {
-    const rows = await prisma.$queryRaw<Array<{ total: number }>>`
-      SELECT COUNT(*) as total
-      FROM "User" u
-      JOIN "UserGameProfile" ugp ON ugp."userId" = u."id"
-        WHERE u."id" != ${userId}
-          AND u."accountStatus" = 'ACTIVE'
-          AND u."lookingForGroup" = true
-          AND u."isLookingNow" = true
-          AND u."onlineStatus" = 'Online'
-        AND ugp."gameId" = ${primaryProfile.gameId}
-        AND ugp."rankLabel" = ${primaryProfile.rankLabel}
-    `;
-    const total = Number(rows[0]?.total ?? 0);
+    const total = await prisma.user.count({
+      where: {
+        id: { not: userId },
+        accountStatus: "ACTIVE",
+        lookingForGroup: true,
+        isLookingNow: true,
+        onlineStatus: "Online",
+        gameProfiles: {
+          some: {
+            gameId: primaryProfile.gameId,
+            rankLabel: primaryProfile.rankLabel,
+          },
+        },
+      },
+    });
     const body = `${total} players in your rank are queueing now.`;
     if (total >= 3 && !(await hasRecentNotification(userId, "RANK_QUEUE", body, 2))) {
       await createNotification({
@@ -708,11 +730,12 @@ export async function refreshEngagementNotifications(userId: string) {
 export async function getAnalyticsSummary() {
   await ensureEngagementSchema();
 
-  const rows = await prisma.$queryRaw<Array<{ type: string; total: number }>>`
-    SELECT "type" as type, COUNT(*) as total
-    FROM "AnalyticsEvent"
-    GROUP BY "type"
-  `;
+  const rows = await prisma.analyticsEvent.groupBy({
+    by: ["type"],
+    _count: {
+      type: true,
+    },
+  });
 
-  return Object.fromEntries(rows.map((row) => [row.type, Number(row.total)]));
+  return Object.fromEntries(rows.map((row) => [row.type, Number(row._count.type)]));
 }
