@@ -1,6 +1,5 @@
 import "server-only";
 
-import { MatchStatus, ReportStatus } from "@prisma/client";
 import { GAME_CATALOG } from "@/lib/config/catalog";
 import { prisma } from "@/lib/prisma";
 import {
@@ -220,7 +219,7 @@ export async function searchPlayers(filter: FilterState, viewerId?: string) {
   const existingMatches = viewerId
     ? await prisma.match.findMany({
         where: {
-          status: MatchStatus.MATCHED,
+          status: "MATCHED",
           OR: [{ userAId: viewerId }, { userBId: viewerId }],
         },
         select: { id: true, userAId: true, userBId: true },
@@ -333,7 +332,7 @@ export async function searchPlayers(filter: FilterState, viewerId?: string) {
 export async function getMatchesForUser(userId: string) {
   const matches = await prisma.match.findMany({
     where: {
-      status: MatchStatus.MATCHED,
+      status: "MATCHED",
       OR: [{ userAId: userId }, { userBId: userId }],
     },
     include: {
@@ -388,8 +387,8 @@ export async function getDashboardStats() {
   const [users, games, matches, reports] = await Promise.all([
     prisma.user.count(),
     prisma.game.count(),
-    prisma.match.count({ where: { status: MatchStatus.MATCHED } }),
-    prisma.report.count({ where: { status: ReportStatus.OPEN } }),
+    prisma.match.count({ where: { status: "MATCHED" } }),
+    prisma.report.count({ where: { status: "OPEN" } }),
   ]);
 
   return { users, games, matches, reports };

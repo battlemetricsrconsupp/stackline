@@ -1,6 +1,5 @@
 "use server";
 
-import { MatchStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { touchUserActivity } from "@/lib/activity";
 import { prisma } from "@/lib/prisma";
@@ -61,8 +60,8 @@ export async function likePlayerAction(targetUserId: string) {
     const [userAId, userBId] = orderedPair(viewer.id, targetUserId);
     const match = await prisma.match.upsert({
       where: { userAId_userBId: { userAId, userBId } },
-      update: { status: MatchStatus.MATCHED },
-      create: { userAId, userBId, status: MatchStatus.MATCHED },
+      update: { status: "MATCHED" },
+      create: { userAId, userBId, status: "MATCHED" },
     });
 
     const matchedUser = await prisma.user.findUnique({
@@ -112,7 +111,7 @@ export async function sendMessageAction(matchId: string, formData: FormData) {
   const match = await prisma.match.findFirst({
     where: {
       id: matchId,
-      status: MatchStatus.MATCHED,
+      status: "MATCHED",
       OR: [{ userAId: viewer.id }, { userBId: viewer.id }],
     },
     select: {
@@ -202,7 +201,7 @@ export async function blockPlayerAction(targetUserId: string) {
     }),
     prisma.match.updateMany({
       where: { userAId, userBId },
-      data: { status: MatchStatus.BLOCKED },
+      data: { status: "BLOCKED" },
     }),
   ]);
 

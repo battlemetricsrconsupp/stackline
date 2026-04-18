@@ -1,7 +1,6 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { MatchStatus } from "@prisma/client";
 import { BRAND } from "@/lib/brand";
 import { prisma } from "@/lib/prisma";
 import { formatLastActive, getPresenceMap, touchUserActivity } from "@/lib/activity";
@@ -449,8 +448,8 @@ export async function respondToPlayInvite(input: {
   const [userAId, userBId] = [invite.senderId, invite.receiverId].sort();
   const match = await prisma.match.upsert({
     where: { userAId_userBId: { userAId, userBId } },
-    update: { status: MatchStatus.MATCHED },
-    create: { userAId, userBId, status: MatchStatus.MATCHED },
+    update: { status: "MATCHED" },
+    create: { userAId, userBId, status: "MATCHED" },
   });
 
   await prisma.like.upsert({
