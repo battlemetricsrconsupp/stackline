@@ -17,6 +17,79 @@ const LIVE_QUEUE_TIMEOUT_MINUTES = 30;
 
 type InviteStatus = "PENDING" | "ACCEPTED" | "DECLINED";
 
+type LookingNowState = {
+  isLookingNow: boolean;
+  lookingNowStartedAt: Date | null;
+};
+
+export type LiveQueueSummary = {
+  totalLookingNow: number;
+  inYourRankCount: number;
+  inYourGameCount: number;
+  perGame: Array<{
+    gameName: string;
+    total: number;
+  }>;
+  players: Array<{
+    id: string;
+    username: string;
+    age: number | null;
+    region: string | null;
+    timezone: string | null;
+    bio: string | null;
+    image: string | null;
+    languages: Array<{ id: string; language: string; userId: string }>;
+    playstyles: Array<{ id: string; tag: string; userId: string }>;
+    playTimes: Array<{ id: string; label: string; userId: string }>;
+    gameProfiles: Array<{
+      id: string;
+      userId: string;
+      gameId: string;
+      rankLabel: string;
+      priority: number;
+      notes: string | null;
+      game: {
+        id: string;
+        slug: string;
+        name: string;
+        genre: string | null;
+        description: string | null;
+        active: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+      };
+    }>;
+    presence: {
+      onlineStatus: "Online" | "Away" | "Offline";
+      currentlyPlaying: string | null;
+      lastActiveAt: Date | null;
+    };
+    trust: {
+      reliabilityScore: number;
+      badges: string[];
+      positiveRatings: number;
+      negativeRatings: number;
+      activeDays: number;
+      activityStreak: number;
+      sessionsPlayed: number;
+    };
+    compatibility: {
+      score: number;
+      reasons: string[];
+      sharedGameCount: number;
+      sameRankCount: number;
+      sameRegion: boolean;
+      sharedPlaystyleCount: number;
+      sharedPlaytimeCount: number;
+    };
+    primaryGameName: string;
+    primaryGameRank: string;
+    primaryGameSlug: string | null;
+    lookingNowStartedAt: Date | null;
+    lookingNowLabel: string;
+  }>;
+};
+
 const userInclude = {
   languages: true,
   playstyles: true,
@@ -73,7 +146,7 @@ async function getBlockedIdsForUser(userId: string) {
   return new Set(blocked.flatMap((entry) => [entry.blockerId, entry.blockedId]));
 }
 
-export async function getLookingNowState(userId: string) {
+export async function getLookingNowState(userId: string): Promise<LookingNowState> {
   await expireInactiveLookingNowUsers();
   const row = await prisma.user.findUnique({
     where: { id: userId },
@@ -85,7 +158,9 @@ export async function getLookingNowState(userId: string) {
   };
 }
 
-export async function getLookingNowMap(userIds: string[]) {
+export async function getLookingNowMap(
+  userIds: string[]
+): Promise<Map<string, Date | null>> {
   await expireInactiveLookingNowUsers();
 
   if (!userIds.length) {
@@ -102,11 +177,8 @@ export async function getLookingNowMap(userIds: string[]) {
     },
   });
 
-  return new Map(
-    rows.map((row) => [
-      row.id,
-      row.lookingNowStartedAt ?? null,
-    ])
+  return new Map<string, Date | null>(
+    rows.map((row) => [row.id, row.lookingNowStartedAt ?? null] as const)
   );
 }
 
@@ -161,7 +233,7 @@ function buildSnapshot(user: {
   };
 }
 
-export async function getLiveQueue(viewerId?: string) {
+export async function getLiveQueue(viewerId?: string): Promise<LiveQueueSummary> {
   try {
     await expireInactiveLookingNowUsers();
 
