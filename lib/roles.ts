@@ -20,7 +20,7 @@ export function getEffectiveRole(input: {
   return normalizeRole(input.role);
 }
 
-export async function getStoredRoleForUser(userId: string) {
+export async function getStoredRoleForUser(userId: string): Promise<UserRole> {
   const rows = await prisma.$queryRaw<Array<{ role: string }>>`
     SELECT role
     FROM "User"
@@ -31,7 +31,9 @@ export async function getStoredRoleForUser(userId: string) {
   return normalizeRole(rows[0]?.role);
 }
 
-export async function getStoredRolesForUsers(userIds: string[]) {
+export async function getStoredRolesForUsers(
+  userIds: string[]
+): Promise<Map<string, UserRole>> {
   if (!userIds.length) {
     return new Map<string, UserRole>();
   }
@@ -42,7 +44,9 @@ export async function getStoredRolesForUsers(userIds: string[]) {
     ...userIds
   );
 
-  return new Map(rows.map((row) => [row.id, normalizeRole(row.role)]));
+  return new Map<string, UserRole>(
+    rows.map((row) => [row.id, normalizeRole(row.role)] as const)
+  );
 }
 
 export async function setStoredRoleForUser(userId: string, role: UserRole) {
